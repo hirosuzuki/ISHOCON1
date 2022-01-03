@@ -107,6 +107,9 @@ def insert_histories
 end
 
 def insert
+  if ENV["RAND_SEED"] then
+    srand(ENV["RAND_SEED"].to_i)
+  end
   insert_user
   insert_products
   insert_comments
