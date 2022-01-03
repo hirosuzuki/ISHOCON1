@@ -46,7 +46,26 @@ func getDB() (*sql.DB, error) {
 	return db, err
 }
 
+func cleanUpDB() {
+	log.Print("Clean Up Database")
+	db, err := getDB()
+	if err != nil {
+		panic(err.Error())
+	}
+	defer db.Close()
+	errCheck := func(result sql.Result, err error) {
+		if err != nil {
+			panic(err.Error())
+		}
+	}
+	errCheck(db.Exec("DELETE FROM users WHERE id > 5000"))
+	errCheck(db.Exec("DELETE FROM products WHERE id > 10000"))
+	errCheck(db.Exec("DELETE FROM comments WHERE id > 200000"))
+	errCheck(db.Exec("DELETE FROM histories WHERE id > 500000"))
+}
+
 func startBenchmark(workload int) {
+	cleanUpDB()
 	getInitialize()
 	log.Print("Benchmark Start!  Workload: " + strconv.Itoa(workload))
 	finishTime := time.Now().Add(1 * time.Minute)

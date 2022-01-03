@@ -20,7 +20,7 @@ func validateInitialize() {
 	id, email, password := getUserInfo(0)
 	var c []*http.Cookie
 	_, c = postLogin(c, email, password)
-	buyProduct(c, 10000)
+	buyProduct(c, 10000, id)
 	validateUsers(id, true)
 	sendComment(c, 10000)
 	validateIndex(0, true)

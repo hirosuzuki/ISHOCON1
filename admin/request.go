@@ -58,10 +58,21 @@ func getLogout(c []*http.Cookie) (int, []*http.Cookie) {
 	return httpRequest("GET", "/logout", nil, c)
 }
 
-func buyProduct(c []*http.Cookie, productID int) (int, []*http.Cookie) {
+func buyProduct(c []*http.Cookie, productID int, userID int) (int, []*http.Cookie) {
 	if productID == 0 {
 		productID = getRand(1, 10000)
 	}
+
+	db, err := getDB()
+	if err != nil {
+		panic(err.Error())
+	}
+	defer db.Close()
+	_, err = db.Exec("INSERT INTO histories (product_id, user_id, created_at) VALUES (?, ?, ?)", productID, userID, time.Now())
+	if err != nil {
+		panic(err.Error())
+	}
+
 	return httpRequest("POST", "/products/buy/"+strconv.Itoa(productID), nil, c)
 }
 

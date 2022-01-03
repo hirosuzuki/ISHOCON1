@@ -115,7 +115,7 @@ func bakugaiScenario(wg *sync.WaitGroup, m *sync.Mutex, finishTime time.Time) {
 	score = calcScore(score, resp)
 
 	for i := 0; i < 20; i++ {
-		resp, c = buyProduct(c, 0)
+		resp, c = buyProduct(c, 0, uID)
 		score = calcScore(score, resp)
 	}
 	updateScore(score, wg, m, finishTime)
