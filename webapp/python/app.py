@@ -73,6 +73,8 @@ def authenticate(email, password):
         abort(401)
     else:
         session['user_id'] = user['id']
+        session['user_name'] = user['name']
+        session['user_email'] = user['email']
 
 
 def authenticated():
@@ -82,9 +84,12 @@ def authenticated():
 
 def current_user():
     if 'user_id' in session:
-        cur = db().cursor()
-        cur.execute('SELECT * FROM users WHERE id = %s', (str(session['user_id']),))
-        return cur.fetchone()
+        user = {
+            "id": session['user_id'],
+            "name": session['user_name'],
+            "email": session['user_email'],
+        }
+        return user
     else:
         return None
 
