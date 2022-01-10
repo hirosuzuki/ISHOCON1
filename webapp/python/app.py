@@ -170,7 +170,7 @@ def get_index():
     page = int(request.args.get('page', 0))
     cur = db().cursor()
     cur.execute("""
-SELECT p.id, p.name, p.description, p.image_path, p.price, s.comments, s.comments_count
+SELECT p.id, p.name, LEFT(p.description, 70) as description, p.image_path, p.price, s.comments, s.comments_count
 FROM products p
 LEFT OUTER JOIN product_summary s ON p.id = s.id
 ORDER BY id DESC LIMIT 50 OFFSET {}
@@ -178,7 +178,6 @@ ORDER BY id DESC LIMIT 50 OFFSET {}
     products = cur.fetchall()
 
     for product in products:
-        product['description'] = product['description'][:70]
         product['comments'] = json.loads(product['comments'])
 
     return render_template('index.html', products=products, current_user=current_user())
