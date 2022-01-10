@@ -5,6 +5,7 @@ import pathlib
 import html
 import urllib
 import datetime
+import json
 
 static_folder = pathlib.Path(__file__).resolve().parent / 'public'
 print(static_folder)
@@ -94,7 +95,7 @@ def update_last_login(user_id):
 def get_comments(product_id):
     cur = db().cursor()
     cur.execute("""
-SELECT *
+SELECT c.content, u.name
 FROM comments as c
 INNER JOIN users as u
 ON c.user_id = u.id
@@ -168,14 +169,17 @@ def get_logout():
 def get_index():
     page = int(request.args.get('page', 0))
     cur = db().cursor()
-    cur.execute("SELECT * FROM products ORDER BY id DESC LIMIT 50 OFFSET {}".format(page * 50))
+    cur.execute("""
+SELECT p.id, p.name, p.description, p.image_path, p.price, s.comments, s.comments_count
+FROM products p
+LEFT OUTER JOIN product_summary s ON p.id = s.id
+ORDER BY id DESC LIMIT 50 OFFSET {}
+""".format(page * 50))
     products = cur.fetchall()
 
     for product in products:
         product['description'] = product['description'][:70]
-        product['created_at'] = to_jst(product['created_at'])
-        product['comments'] = get_comments(product['id'])
-        product['comments_count'] = get_comments_count(product['id'])
+        product['comments'] = json.loads(product['comments'])
 
     return render_template('index.html', products=products, current_user=current_user())
 
@@ -235,8 +239,39 @@ def post_products_buy(product_id):
 def post_comments(product_id):
     authenticated()
     create_comment(product_id, current_user()['id'], request.form['content'])
+    update_product_summary(product_id)
     return redirect("/users/{}".format(current_user()['id']))
 
+def update_product_summary(id):
+    cur = db().cursor()
+    comments = get_comments(id)
+    comments_count = get_comments_count(id)
+    cur.execute('UPDATE product_summary SET comments_count = %s, comments = %s WHERE id = %s', (comments_count, json.dumps(comments), id))
+
+@app.route('/init_product_summary')
+def init_product_summary():
+    cur = db().cursor()
+    cur.execute('DROP TABLE IF EXISTS product_summary')
+    cur.execute('CREATE TABLE product_summary (id int, comments_count int, comments text, primary key (id))')
+
+    product_comments = {}
+    product_comment_count = {}
+    
+    cur.execute("SELECT c.product_id, c.content, u.name FROM comments as c INNER JOIN users as u ON c.user_id = u.id ORDER BY c.created_at DESC")
+    rows = cur.fetchall()
+    for row in rows:
+        id = row["product_id"]
+        if id not in product_comments:
+            product_comments[id] = []
+        if id not in product_comment_count:
+            product_comment_count[id] = 0
+        if len(product_comments[id]) < 5:
+            product_comments[id].append({"content": row["content"], "name": row["name"]})
+        product_comment_count[id] += 1
+    
+    cur.executemany('INSERT INTO product_summary (id, comments_count, comments) values (%s, %s, %s)', [(id, product_comment_count[id], json.dumps(product_comments[id])) for id in product_comments])
+
+    return "OK"
 
 @app.route('/initialize')
 def get_initialize():
@@ -245,6 +280,7 @@ def get_initialize():
     cur.execute('DELETE FROM products WHERE id > 10000')
     cur.execute('DELETE FROM comments WHERE id > 200000')
     cur.execute('DELETE FROM histories WHERE id > 500000')
+    init_product_summary()
     return ("Finish")
 
 
