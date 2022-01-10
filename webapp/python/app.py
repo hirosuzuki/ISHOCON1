@@ -6,6 +6,7 @@ import html
 import urllib
 import datetime
 import json
+import memcache
 
 static_folder = pathlib.Path(__file__).resolve().parent / 'public'
 print(static_folder)
@@ -21,6 +22,7 @@ _config = {
     'db_database': os.environ.get('ISHOCON1_DB_NAME', 'ishocon1'),
 }
 
+mc = memcache.Client(['127.0.0.1:11211'], debug=0)
 
 def config(key):
     if key in _config:
@@ -183,11 +185,10 @@ ORDER BY id DESC LIMIT 50 OFFSET {}
     return render_template('index.html', products=products, current_user=current_user())
 
 
-@app.route('/users/<int:user_id>')
-def get_mypage(user_id):
+def get_user_info(user_id):
     cur = db().cursor()
     cur.execute("""
-SELECT p.id, p.name, p.description, p.image_path, p.price, h.created_at
+SELECT p.id, p.name, LEFT(p.description, 70) as description, p.image_path, p.price, h.created_at
 FROM histories as h
 LEFT OUTER JOIN products as p
 ON h.product_id = p.id
@@ -200,13 +201,34 @@ ORDER BY h.id DESC
     total_pay = 0
     for product in products:
         total_pay += product['price']
-        product['description'] = product['description'][:70]
-        product['created_at'] = to_jst(product['created_at'])
+        product['created_at'] = str(to_jst(product['created_at']))
 
     cur = db().cursor()
-    cur.execute('SELECT * FROM users WHERE id = {}'.format(str(user_id)))
+    cur.execute('SELECT name FROM users WHERE id = {}'.format(str(user_id)))
     user = cur.fetchone()
+    return (products, total_pay, user)
 
+
+def cache_user_info(user_id):
+    key = "us_%s" % user_id
+    val = get_user_info(user_id)
+    mc.set(key, val, 120)
+    return val
+
+def get_cached_user_info(user_id):
+    key = "us_%s" % user_id
+    val = mc.get(key)
+    if not val:
+        val = cache_user_info(user_id)
+    return val
+
+def uncached_user_info(user_id):
+    key = "us_%s" % user_id
+    mc.delete(key)
+
+@app.route('/users/<int:user_id>')
+def get_mypage(user_id):
+    products, total_pay, user = get_cached_user_info(user_id)
     return render_template('mypage.html', products=products, user=user,
                                           total_pay=total_pay, current_user=current_user())
 
@@ -229,7 +251,9 @@ def get_product(product_id):
 @app.route('/products/buy/<int:product_id>', methods=['POST'])
 def post_products_buy(product_id):
     authenticated()
-    buy_product(product_id, current_user()['id'])
+    user = current_user()
+    buy_product(product_id, user['id'])
+    cache_user_info(user['id'])
 
     return redirect("/users/{}".format(current_user()['id']))
 
@@ -272,6 +296,15 @@ def init_product_summary():
 
     return "OK"
 
+@app.route('/init_user_info')
+def init_user_info():
+    cur = db().cursor()
+    cur.execute("SELECT id from users ORDER BY id")
+    rows = cur.fetchall()
+    for row in rows:
+        cache_user_info(row["id"])
+    return "OK"
+
 @app.route('/initialize')
 def get_initialize():
     cur = db().cursor()
@@ -280,6 +313,7 @@ def get_initialize():
     cur.execute('DELETE FROM comments WHERE id > 200000')
     cur.execute('DELETE FROM histories WHERE id > 500000')
     init_product_summary()
+    init_user_info()
     return ("Finish")
 
 
